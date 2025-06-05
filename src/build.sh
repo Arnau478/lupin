@@ -18,12 +18,16 @@ mkdir -p \
     $BUILD_DIR/pkg \
     $BUILD_DIR/kernel \
     $BUILD_DIR/busybox \
-    $BUILD_DIR/rootfs/bin \
-    $BUILD_DIR/rootfs/sbin \
+    $BUILD_DIR/rootfs/usr/bin \
+    $BUILD_DIR/rootfs/usr/sbin \
     $BUILD_DIR/rootfs/etc \
+    $BUILD_DIR/rootfs/home \
     $BUILD_DIR/iso/boot \
     $BUILD_DIR/iso/isolinux \
     $BUILD_DIR/initramfs
+ln -s usr/bin $BUILD_DIR/rootfs/bin
+ln -s usr/bin $BUILD_DIR/rootfs/sbin
+ln -s bin $BUILD_DIR/rootfs/usr/sbin
 
 for rel_script in src/pkg/*.sh; do
     cd $BUILD_DIR
@@ -77,7 +81,12 @@ $BUILD_DIR/kernel/linux-$KERNEL_VERSION/scripts/config --disable CONFIG_LINUXRC
 make silentoldconfig
 make CC="ccache gcc" -j$(nproc)
 make install
-cp -a _install/* $BUILD_DIR/rootfs/
+cp _install/bin/busybox $BUILD_DIR/rootfs/usr/bin/busybox
+for file in _install/usr/bin/* _install/bin/*; do
+    if [ ! -f $BUILD_DIR/rootfs/usr/bin/"$(basename "$file")" ]; then
+        ln -s busybox $BUILD_DIR/rootfs/usr/bin/"$(basename "$file")"
+    fi
+done
 
 echo "Building kernel..."
 cd $BUILD_DIR/kernel
@@ -104,8 +113,11 @@ cp arch/x86/boot/bzImage $BUILD_DIR/iso/boot/vmlinuz
 echo "Creating init script..."
 cd $BUILD_DIR/rootfs
 mkdir -p proc sys dev
-cat > sbin/init << 'EOF'
+cat > usr/bin/init << 'EOF'
 #!/bin/sh
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/bin
+export SHLVL=0
+export HOME=/home
 mount -t proc none /proc
 mount -t sysfs none /sys
 mount -t devtmpfs none /dev
@@ -116,10 +128,11 @@ while :
 do
     clear
     echo -e "Welcome to \x1b[93mLupin\x1b[0m Linux"
+    cd $HOME
     setsid /bin/sh -c "exec /bin/sh </dev/tty1 >/dev/tty1 2>&1"
 done
 EOF
-chmod +x sbin/init
+chmod +x usr/bin/init
 
 echo "Creating misc files..."
 cd $BUILD_DIR/rootfs
@@ -169,7 +182,7 @@ cat > $BUILD_DIR/iso/isolinux/isolinux.cfg << 'EOF'
 DEFAULT linux
 LABEL linux
   KERNEL /boot/vmlinuz
-  APPEND initrd=/boot/initrd.gz console=ttyS0
+  APPEND initrd=/boot/initrd.gz quiet
 EOF
 
 echo "Creating ISO..."
