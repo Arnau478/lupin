@@ -8,6 +8,8 @@ KERNEL_VERSION=$(get_config_value KERNEL_VERSION) || exit 1
 BUILD_DIR=/build
 OUT_ISO=$BUILD_DIR/lupin.iso
 
+HOSTNAME=$(get_config_value HOSTNAME) || exit 1
+
 export CCACHE_DIR=/root/.ccache
 export CCACHE_MAXSIZE=1G
 export PATH="/usr/lib/ccache:$PATH"
@@ -125,6 +127,7 @@ mount -t sysfs none /sys
 mount -t devtmpfs none /dev
 mkdir -p /dev/pts
 mount -t devpts none /dev/pts
+hostname $(cat /etc/hostname)
 exec </dev/tty1 >/dev/tty1 2>&1
 while :
 do
@@ -143,6 +146,10 @@ NAME="Lupin Linux"
 PRETTY_NAME="Lupin Linux"
 ID=lupin
 ANSI_COLOR="93"
+EOF
+echo "$HOSTNAME" > etc/hostname
+cat > etc/passwd << 'EOF'
+root::0:0::/home:/bin/sh
 EOF
 
 echo "Creating squashfs filesystem..."
