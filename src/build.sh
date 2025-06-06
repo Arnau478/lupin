@@ -46,9 +46,11 @@ for rel_script in src/pkg/*.sh; do
         source "$script"
 
         for dep in ${dependencies[@]}; do
-            # TODO: Check dependencies
-            echo "TODO"
-            exit 1
+            uppercase_dep_name=$(echo "$dep" | tr '[:lower:]' '[:upper:]')
+            if ! get_config_bool "$uppercase_dep_name"; then
+                echo "Error: $pkg_name depends on $dep, which wasn't enabled"
+                exit 1
+            fi
         done
 
         build
