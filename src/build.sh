@@ -5,12 +5,13 @@ source src/config.sh
 
 BUSYBOX_VERSION=$(get_config_value BUSYBOX_VERSION) || exit 1
 KERNEL_VERSION=$(get_config_value KERNEL_VERSION) || exit 1
+FIRMWARE_VERSION=$(get_config_value FIRMWARE_VERSION) || exit 1
 BUILD_DIR=/build
 OUT_ISO=$BUILD_DIR/lupin.iso
 
 HOSTNAME=$(get_config_value HOSTNAME) || exit 1
 
-export CCACHE_DIR=/root/.ccache
+export CCACHE_DIR=/root/.cache/ccache
 export CCACHE_MAXSIZE=1G
 export PATH="/usr/lib/ccache:$PATH"
 
@@ -19,9 +20,14 @@ echo "Kernel version: $KERNEL_VERSION"
 mkdir -p \
     $BUILD_DIR/pkg \
     $BUILD_DIR/kernel \
+    $BUILD_DIR/firmware \
     $BUILD_DIR/busybox \
     $BUILD_DIR/rootfs/usr/bin \
     $BUILD_DIR/rootfs/usr/sbin \
+    $BUILD_DIR/rootfs/usr/lib/firmware \
+    $BUILD_DIR/rootfs/usr/lib/modules \
+    $BUILD_DIR/rootfs/usr/include \
+    $BUILD_DIR/rootfs/usr/share/man \
     $BUILD_DIR/rootfs/etc \
     $BUILD_DIR/rootfs/home \
     $BUILD_DIR/iso/boot \
@@ -29,6 +35,8 @@ mkdir -p \
     $BUILD_DIR/initramfs
 ln -s usr/bin $BUILD_DIR/rootfs/bin
 ln -s usr/bin $BUILD_DIR/rootfs/sbin
+ln -s usr/lib $BUILD_DIR/rootfs/lib
+ln -s usr/lib $BUILD_DIR/rootfs/lib64
 ln -s bin $BUILD_DIR/rootfs/usr/sbin
 
 for rel_script in src/pkg/*.sh; do
@@ -74,6 +82,12 @@ cd $BUILD_DIR/kernel
 wget -nc https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-$KERNEL_VERSION.tar.xz
 tar -xf linux-$KERNEL_VERSION.tar.xz
 
+echo "Fetching firmware..."
+cd $BUILD_DIR/firmware
+wget -nc https://gitlab.com/kernel-firmware/linux-firmware/-/archive/$FIRMWARE_VERSION/linux-firmware-$FIRMWARE_VERSION.tar.gz
+tar -xf linux-firmware-$FIRMWARE_VERSION.tar.gz
+cp -a linux-firmware-$FIRMWARE_VERSION/* $BUILD_DIR/rootfs/usr/lib/firmware
+
 echo "Building busybox..."
 cd $BUILD_DIR/busybox
 cd busybox-$BUSYBOX_VERSION
@@ -86,7 +100,7 @@ make silentoldconfig
 make CC="ccache gcc" -j$(nproc)
 make install
 cp _install/bin/busybox $BUILD_DIR/rootfs/usr/bin/busybox
-for file in _install/usr/bin/* _install/bin/*; do
+for file in _install/usr/bin/* _install/bin/* _install/usr/sbin/* _install/sbin/*; do
     if [ ! -f $BUILD_DIR/rootfs/usr/bin/"$(basename "$file")" ]; then
         ln -s busybox $BUILD_DIR/rootfs/usr/bin/"$(basename "$file")"
     fi
@@ -103,9 +117,28 @@ make defconfig
 ./scripts/config --enable CONFIG_ISO9660_FS
 ./scripts/config --enable CONFIG_OVERLAY_FS
 ./scripts/config --enable CONFIG_EXT4_FS
+./scripts/config --enable CONFIG_DEVTMPFS
+./scripts/config --enable CONFIG_DEVTMPFS_MOUNT
 ./scripts/config --enable CONFIG_REPRODUCIBLE_BUILD
 ./scripts/config --set-str CONFIG_LOCALVERSION ""
 ./scripts/config --disable CONFIG_DEBUG_INFO
+./scripts/config --enable CONFIG_DRM
+./scripts/config --enable CONFIG_DRM_KMS_HELPER
+./scripts/config --enable CONFIG_DRM_FBDEV_EMULATION
+./scripts/config --set-val CONFIG_DRM_FBDEV_OVERALLOC 100
+./scripts/config --module CONFIG_DRM_I915
+./scripts/config --module CONFIG_DRM_AMDGPU
+./scripts/config --module CONFIG_DRM_NOUVEAU
+./scripts/config --module CONFIG_DRM_VMWGFX
+./scripts/config --module CONFIG_DRM_VBOXVIDEO
+./scripts/config --module CONFIG_DRM_VIRTIO_GPU
+./scripts/config --module CONFIG_DRM_BOCHS
+./scripts/config --enable CONFIG_FB
+./scripts/config --enable CONFIG_FB_SIMPLE
+./scripts/config --enable CONFIG_FW_LOADER
+./scripts/config --enable CONFIG_VT
+./scripts/config --enable CONFIG_VT_CONSOLE
+./scripts/config --enable CONFIG_HW_CONSOLE
 make olddefconfig
 make KBUILD_BUILD_TIMESTAMP="1970-01-01 00:00:00" \
      KBUILD_BUILD_USER="builder" \
@@ -113,6 +146,7 @@ make KBUILD_BUILD_TIMESTAMP="1970-01-01 00:00:00" \
      CC="ccache gcc" \
      -j$(nproc)
 cp arch/x86/boot/bzImage $BUILD_DIR/iso/boot/vmlinuz
+make INSTALL_MOD_PATH=$BUILD_DIR/rootfs modules_install
 
 echo "Creating init script..."
 cd $BUILD_DIR/rootfs
@@ -127,6 +161,12 @@ mount -t sysfs none /sys
 mount -t devtmpfs none /dev
 mkdir -p /dev/pts
 mount -t devpts none /dev/pts
+modprobe drm_kms_helper
+modprobe amdgpu
+modprobe i915
+modprobe nouveau
+modprobe virtio_gpu
+modprobe bochs
 hostname $(cat /etc/hostname)
 exec </dev/tty1 >/dev/tty1 2>&1
 while :

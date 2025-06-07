@@ -33,7 +33,7 @@ RUN apk add --no-cache \
 WORKDIR /build
 COPY .config .
 ADD src src
-RUN --mount=type=cache,target=/root/.ccache \
+RUN --mount=type=cache,target=/root/.cache \
     chmod +x src/build.sh && ./src/build.sh
 
 FROM scratch
