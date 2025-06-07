@@ -6,7 +6,7 @@ build() {
     tar -xf file-$FILE_VERSION.tar.gz
     cd file-$FILE_VERSION
     mkdir out
-    ./configure --prefix=$(realpath out) LD="musl-gcc" CCFLAGS="-Os" LDFLAGS="-static" --disable-shared --enable-static
+    ./configure --prefix=$(realpath out) CC="zig cc -target x86_64-linux-musl" CCFLAGS="-Os" LDFLAGS="-static" --disable-shared --enable-static
     make
     make install
     mv out/bin/file $OUT/usr/bin/file
