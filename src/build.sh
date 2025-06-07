@@ -206,10 +206,17 @@ mount -t sysfs none /sys
 mount -t devtmpfs none /dev
 mkdir -p /mnt/cdrom /ro /newroot /cow
 sleep 1
-for dev in /dev/sr0 /dev/sd*; do
-    echo "Trying $dev..."
-    mount "$dev" /mnt/cdrom 2>/dev/null && [ -f /mnt/cdrom/rootfs.sqsh ] && break
-    umount /mnt/cdrom 2>/dev/null
+for i in $(seq 10); do
+    for dev in /dev/sr0 /dev/sd*; do
+        echo "Trying $dev..."
+        mount "$dev" /mnt/cdrom 2>/dev/null && [ -f /mnt/cdrom/rootfs.sqsh ] && break
+        umount /mnt/cdrom 2>/dev/null
+    done
+    if mountpoint -q /mnt/cdrom; then
+        break
+    fi
+    echo "Waiting and trying again..."
+    sleep 5
 done
 if ! mountpoint -q /mnt/cdrom; then
     echo "No valid ISO device found with rootfs.sqsh"
