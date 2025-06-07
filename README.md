@@ -1,3 +1,5 @@
+<div align="center"><img src="assets/logo-text.png" width="50%" /></div>
+
 Lupin Linux is a *build-time configured*, *non-persistent*, *reproducible* linux distribution.
 
 **WARNING**: Very early in development
